@@ -1,0 +1,25 @@
+#######################################
+# Syntax Coloring Map
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1) Classes
+#######################################
+
+WH_ESP8266   KEYWORD1
+
+#######################################
+# Datatypes (KEYWORD2) Methods
+#######################################
+
+DeviceClient KEYWORD2
+
+#######################################
+# Datatypes (KEYWORD3) Setup & Loop
+#######################################
+
+SetDevice    KEYWORD3
+SetWiFi    KEYWORD3
+initDevice    KEYWORD3
+Handle    KEYWORD3
+HandleResponse    KEYWORD3
