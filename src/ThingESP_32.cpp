@@ -1,32 +1,27 @@
 #if defined(ESP8266)
 #include <ESP8266WiFi.h>
-#else
+#elif defined (ESP32)
 #include <WiFi.h>
 #endif
 #include "PubSubClient/PubSubClient.h"
 #include "ArduinoJson.h"
-//#include <string.h>
-//WiFiClient espClient;
-//PubSubClient client(espClient);
-   
+
 String HandleResponse(String query);
 
-class WH_ESP8266
+class ThingESP32
 {
 public:
-  WH_ESP8266()
+  ThingESP32(String username, String deviceName, String password)
   {
- WiFiClient espClient;
+    WiFiClient espClient;
     PubSubClient client(espClient);
     this->client = client;
-  };
-
-  void SetDevice(String username, String deviceName, String password)
-  {
     this->Username = username;
     this->DeviceName = deviceName;
     this->Password = password;
-  }
+  };
+
+ 
   void SetWiFi(const char *ssID, const char *ssID_password)
   {
     this->ssid = ssID;
@@ -174,7 +169,7 @@ private:
 
     this->client.setServer(this->mqttServer, this->mqttPort);
     this->client.setCallback([this](char *topic, byte *payload, unsigned int length) {
-      this->callback(topic, payload, length);
+     callback(topic, payload, length);
     });
   }
 };

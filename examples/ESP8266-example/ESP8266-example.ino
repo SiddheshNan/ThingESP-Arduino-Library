@@ -1,7 +1,7 @@
 #include <ESP8266WiFi.h>
-#include <whesp8266.h>
+#include <ThingESP.h>
 
-WH_ESP8266 DeviceClient;
+ThingESP8266 thing("username", "project_name", "credentials");
 
 int LED = LED_BUILTIN;
 
@@ -10,13 +10,10 @@ void setup()
   Serial.begin(115200);
 
   pinMode(LED, OUTPUT);
-  digitalWrite(LED, 1);
 
-  DeviceClient.SetDevice("username", "project_name", "credentials");
+  thing.SetWiFi("wifi_ssid", "wifi_password");
 
-  DeviceClient.SetWiFi("ssid", "pass");
-
-  DeviceClient.initDevice();
+  thing.initDevice();
 
 }
 
@@ -49,6 +46,6 @@ String HandleResponse(String query)
 void loop()
 {
 
-  DeviceClient.Handle();
+  thing.Handle();
 
 }
