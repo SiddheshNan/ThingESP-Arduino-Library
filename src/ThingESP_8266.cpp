@@ -1,11 +1,14 @@
 #if defined(ESP8266)
 #include <ESP8266WiFi.h>
-#elif defined (ESP32)
+#elif defined(ESP32)
 #include <WiFi.h>
 #endif
-
 #include "PubSubClient/PubSubClient.h"
 #include "ArduinoJson.h"
+
+#ifndef _DISABLE_TLS_
+#include <WiFiClientSecure.h>
+#endif
 
 String HandleResponse(String query);
 
@@ -14,15 +17,25 @@ class ThingESP8266
 public:
   ThingESP8266(String username, String deviceName, String password)
   {
-    WiFiClient espClient;
-    PubSubClient client(espClient);
+      #ifndef _DISABLE_TLS_
+        WiFiClientSecure espClient;
+        #if !defined(ESP32)
+          espClient.setInsecure();
+        #endif
+        this->espClient = espClient;
+        PubSubClient client(this->espClient);
+      #else
+        WiFiClient espClient;
+        PubSubClient client(espClient);
+      #endif
+   
+    delay(2);
     this->client = client;
     this->Username = username;
     this->DeviceName = deviceName;
     this->Password = password;
   };
 
- 
   void SetWiFi(const char *ssID, const char *ssID_password)
   {
     this->ssid = ssID;
@@ -61,16 +74,14 @@ public:
 
   void initDevice()
   {
-  //  this->client = client;
+    //  this->client = client;
     this->topic = this->DeviceName + "/" + this->Username;
     this->outname = this->DeviceName + "@" + this->Username;
-
     this->char_DeviceName = this->DeviceName.c_str();
     this->char_Password = this->Password.c_str();
     this->char_outname = this->outname.c_str();
     this->char_topic = this->topic.c_str();
     this->initiated = true;
-
     this->setupIT();
   }
 
@@ -118,8 +129,38 @@ private:
   const char *ssid;
   const char *ssid_password;
 
-  const char *mqttServer = "thingesp.siddhesh.me";
+  const char *mqttServer = "10.0.0.150";
+
+  #ifndef _DISABLE_TLS_
+  int mqttPort = 1899;
+  #else 
   int mqttPort = 1893;
+  #endif
+
+
+  /*
+  #ifndef _THINGESP_SERVER_
+  const char *mqttServer = "thingesp.siddhesh.me";
+  #else
+  const char *mqttServer = _THINGESP_SERVER_;
+  #endif
+
+
+  #ifndef _THINGESP_PORT_
+  #define _THINGESP_PORT_  1893
+  #endif
+
+  #ifndef _THINGESP_PORT_TLS_
+  #define _THINGESP_PORT_TLS_  1899
+  #endif
+
+  #ifndef _DISABLE_TLS_
+  int mqttPort = _THINGESP_PORT_TLS_;
+  #endif
+  #ifdef _DISABLE_TLS_
+  int mqttPort = _THINGESP_PORT_;
+  #endif
+*/
 
   String topic;
   String outname;
@@ -129,6 +170,7 @@ private:
   const char *char_topic;
 
   PubSubClient client;
+  WiFiClientSecure espClient;
 
   void callback(char *topic, byte *payload, unsigned int length)
   {
@@ -140,9 +182,9 @@ private:
     Serial.println();
     for (int i = 0; i < length; i++)
     {
-      Serial.print((char)payload[i]);
       srr.concat((char)payload[i]);
     }
+    Serial.print(srr);
     this->logic(srr);
   }
 
@@ -152,6 +194,7 @@ private:
     Serial.println();
     Serial.print("Connecting to ");
     Serial.println(ssid);
+    Serial.println(mqttPort);
 
     WiFi.begin(ssid, ssid_password);
 
@@ -170,7 +213,7 @@ private:
 
     this->client.setServer(this->mqttServer, this->mqttPort);
     this->client.setCallback([this](char *topic, byte *payload, unsigned int length) {
-     callback(topic, payload, length);
+      callback(topic, payload, length);
     });
   }
 };

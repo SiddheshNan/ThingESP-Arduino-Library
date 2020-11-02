@@ -6,6 +6,7 @@
 #include "PubSubClient/PubSubClient.h"
 #include "ArduinoJson.h"
 
+
 String HandleResponse(String query);
 
 class ThingESP32
@@ -118,6 +119,7 @@ private:
   const char *ssid_password;
 
   const char *mqttServer = "thingesp.siddhesh.me";
+ 
   int mqttPort = 1893;
 
   String topic;
@@ -139,9 +141,9 @@ private:
     Serial.println();
     for (int i = 0; i < length; i++)
     {
-      Serial.print((char)payload[i]);
       srr.concat((char)payload[i]);
     }
+    Serial.print(srr);
     this->logic(srr);
   }
 
@@ -151,6 +153,7 @@ private:
     Serial.println();
     Serial.print("Connecting to ");
     Serial.println(ssid);
+    Serial.println(mqttServer);
 
     WiFi.begin(ssid, ssid_password);
 
