@@ -129,8 +129,7 @@ private:
   const char *ssid;
   const char *ssid_password;
 
-  const char *mqttServer = "10.0.0.150";
-
+  const char *mqttServer = "thingesp.siddhesh.me";
   #ifndef _DISABLE_TLS_
   int mqttPort = 1899;
   #else 
