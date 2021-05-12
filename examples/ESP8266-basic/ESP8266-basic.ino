@@ -1,9 +1,9 @@
-#include <WiFi.h>
+#include <ESP8266WiFi.h>
 #include <ThingESP.h>
 
-ThingESP32 thing("username", "project_name", "credentials");
+ThingESP8266 thing("username", "project_name", "credentials");
 
-int LED = 16;
+int LED = LED_BUILTIN;
 
 void setup()
 {
@@ -45,7 +45,5 @@ String HandleResponse(String query)
 
 void loop()
 {
-
   thing.Handle();
-
 }

@@ -1,9 +1,9 @@
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <ThingESP.h>
 
-ThingESP8266 thing("username", "project_name", "credentials");
+ThingESP32 thing("username", "project_name", "credentials");
 
-int LED = LED_BUILTIN;
+int LED = 2;
 
 void setup()
 {
@@ -23,17 +23,17 @@ String HandleResponse(String query)
 {
 
   if (query == "led on") {
-    digitalWrite(LED, 0);
+    digitalWrite(LED, 1);
     return "Done: LED Turned ON";
   }
 
   else if (query == "led off") {
-    digitalWrite(LED, 1);
+    digitalWrite(LED, 0);
     return "Done: LED Turned OFF";
   }
 
   else if (query == "led status")
-    return digitalRead(LED) ? "LED is OFF" : "LED is ON";
+    return digitalRead(LED) ? "LED is ON" : "LED is OFF";
 
 
   else return "Your query was invalid..";
@@ -45,7 +45,5 @@ String HandleResponse(String query)
 
 void loop()
 {
-
   thing.Handle();
-
 }
