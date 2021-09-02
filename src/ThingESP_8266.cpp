@@ -1,218 +1,192 @@
+#pragma once
+
 #if defined(ESP8266)
-#include <ESP8266WiFi.h>
+    #include <ESP8266WiFi.h>
 #elif defined(ESP32)
-#include <WiFi.h>
+    #include <WiFi.h>
 #endif
+
+#ifndef _DISABLE_TLS_
+    #include <WiFiClientSecure.h>
+#endif
+
+#include <stdint.h>
+#include <string.h>
+
 #include "PubSubClient/PubSubClient.h"
 #include "ArduinoJson.h"
 
-#ifndef _DISABLE_TLS_
-#include <WiFiClientSecure.h>
-#endif
+#include "thingesp/Logger.cpp"
+#include "thingesp/Device.cpp"
+#include "thingesp/RateLimiter.cpp"
 
-String HandleResponse(String query);
+String HandleResponse(String query) __attribute__((weak));
 
-class ThingESP8266
+class ThingESP8266 : public DeviceData, public RateLimiter
 {
 public:
-  ThingESP8266(String username, String deviceName, String password)
-  {
-      #ifndef _DISABLE_TLS_
-        WiFiClientSecure espClient;
-        #if !defined(ESP32)
-          espClient.setInsecure();
+    ThingESP8266(const char* _username, const char* _projectName, const char* _credentials) : client(espClient)
+    {
+        #if !defined(_DISABLE_TLS_) && !defined(ESP32)
+            espClient.setInsecure();
         #endif
-        this->espClient = espClient;
-        PubSubClient client(this->espClient);
-      #else
-        WiFiClient espClient;
-        PubSubClient client(espClient);
-      #endif
-   
-    delay(2);
-    this->client = client;
-    this->Username = username;
-    this->DeviceName = deviceName;
-    this->Password = password;
-  };
 
-  void SetWiFi(const char *ssID, const char *ssID_password)
-  {
-    this->ssid = ssID;
-    this->ssid_password = ssID_password;
-  }
+        delay(2);
 
-  void logic(String data)
-  {
-    DynamicJsonDocument data_in(1024);
-    DynamicJsonDocument data_out(1024);
-    deserializeJson(data_in, data);
+        username = _username;
+        projectName = _projectName;
+        credentials = _credentials;
 
-    if (data_in["action"] == "query")
+        genMetaData();
+    };
+
+
+    void sendMsg(String number, String msg)
     {
-      data_out["msg_id"] = data_in["msg_id"];
-      data_out["action"] = "returned_api_response";
-      String query = data_in["query"];
-      query.toLowerCase();
-      data_out["returned_api_response"] = HandleResponse(query);
-      String outdata;
-      serializeJson(data_out, outdata);
-      publishMSG(outdata.c_str());
+        if (is_rate_limited()) return;
+
+        DynamicJsonDocument data_out(1024);
+        data_out["action"] = "device_call";
+        data_out["to_number"] = number;
+        data_out["msg"] = msg;
+        String outdata;
+        serializeJson(data_out, outdata);
+        publishMSG(outdata.c_str());
     }
-  };
 
-  void sendMsg(String number, String msg)
-  {
-    DynamicJsonDocument data_out(1024);
-    data_out["action"] = "device_call";
-    data_out["to_number"] = number;
-    data_out["msg"] = msg;
-    String outdata;
-    serializeJson(data_out, outdata);
-    publishMSG(outdata.c_str());
-  }
-
-  void initDevice()
-  {
-    //  this->client = client;
-    this->topic = this->DeviceName + "/" + this->Username;
-    this->outname = this->DeviceName + "@" + this->Username;
-    this->char_DeviceName = this->DeviceName.c_str();
-    this->char_Password = this->Password.c_str();
-    this->char_outname = this->outname.c_str();
-    this->char_topic = this->topic.c_str();
-    this->initiated = true;
-    this->setupIT();
-  }
-
-  void Handle()
-  {
-    if (!client.connected())
+    void initDevice()
     {
-      while (!client.connected())
-      {
-        Serial.print("Attempting connection...");
-        if (client.connect(this->char_outname, this->char_outname, this->char_Password))
-        {
-          Serial.println("connected");
-          client.subscribe(this->char_topic);
+        if (wifi_configured) {
+
+            LOG_VALUE("WiFi", "Connecting to: ", ssid)
+
+            WiFi.begin(ssid, ssid_password);
+
+            while (WiFi.status() != WL_CONNECTED) {
+                delay(500);
+            }
+
+            LOG("WiFi", "Connected successfully");
+            LOG_VALUE("WiFi","IP address: ", WiFi.localIP());
+
+
         }
-        else
-        {
-          Serial.print("failed, rc=");
-          Serial.print(this->client.state());
-          Serial.println(" try again in 5 seconds");
-          delay(5000);
-        }
-      }
+
+        randomSeed(micros());
+
+        client.setServer(MQTT_SERVER, MQTT_PORT);
+        client.setCallback([this](char *topic, byte *payload, unsigned int length) {
+            callback(topic, payload, length);
+        });
     }
-    this->client.loop();
-  }
 
-  void publishMSG(const char *info)
-  {
-    client.publish(this->char_topic, info);
-  }
+    void Handle()
+    {
+        if (!client.connected())
+        {
+            while (!client.connected())
+            {
+                LOG("SOCKET", "Attempting connection to ThingESP")
 
-  void SetHost(const char *host)
-  {
-    this->mqttServer = host;
-  }
+                if (client.connect(outName.c_str(), outName.c_str(), credentials))
+                {
+                    LOG("SOCKET", "Connected to ThingESP successfully")
+                    client.subscribe(topic.c_str());
+                    publishMSG(get_rate_limits_msg());
+                }
+                else
+                {
+                    LOG_VALUE("SOCKET", "Error connecting to ThingESP! Error code: ", client.state());
+                    if (client.state() == 5)
+                        LOG("SOCKET","Please check your username, project name or credentials! ")
+                    LOG("SOCKET",  "Trying again in 10 seconds..");
+                    delay(10000);
+                }
+            }
+        }
+        client.loop();
+    }
+
+
+    void setCallback( String(*clbk)(String) ){
+        this->callbackFunction = clbk;
+    }
 
 private:
-  String Username;
-  String DeviceName;
-  String Password;
 
-  bool initiated = false;
-
-  const char *ssid;
-  const char *ssid_password;
-
-  const char *mqttServer = "thingesp.siddhesh.me";
-  #ifndef _DISABLE_TLS_
-  int mqttPort = 1899;
-  #else 
-  int mqttPort = 1893;
-  #endif
+    /*
+     * the callback function
+     */
+    String (*callbackFunction)(String);
 
 
-  /*
-  #ifndef _THINGESP_SERVER_
-  const char *mqttServer = "thingesp.siddhesh.me";
-  #else
-  const char *mqttServer = _THINGESP_SERVER_;
-  #endif
+    /*
+     * the WiFi Client
+     */
+    #ifndef _DISABLE_TLS_
+        WiFiClientSecure espClient;
+    #else
+        WiFiClient espClient;
+    #endif
 
 
-  #ifndef _THINGESP_PORT_
-  #define _THINGESP_PORT_  1893
-  #endif
+    /*
+    * PubSubClient for MQTT
+    */
+        PubSubClient client;
 
-  #ifndef _THINGESP_PORT_TLS_
-  #define _THINGESP_PORT_TLS_  1899
-  #endif
 
-  #ifndef _DISABLE_TLS_
-  int mqttPort = _THINGESP_PORT_TLS_;
-  #endif
-  #ifdef _DISABLE_TLS_
-  int mqttPort = _THINGESP_PORT_;
-  #endif
-*/
-
-  String topic;
-  String outname;
-  const char *char_DeviceName;
-  const char *char_Password;
-  const char *char_outname;
-  const char *char_topic;
-
-  PubSubClient client;
-  WiFiClientSecure espClient;
-
-  void callback(char *topic, byte *payload, unsigned int length)
-  {
-    String srr;
-    Serial.println();
-    Serial.print("Message arrived [");
-    Serial.print(topic);
-    Serial.print("] ");
-    Serial.println();
-    for (int i = 0; i < length; i++)
+    void publishMSG(const char* _msg)
     {
-      srr.concat((char)payload[i]);
-    }
-    Serial.print(srr);
-    this->logic(srr);
-  }
-
-  void setupIT()
-  {
-
-    Serial.println();
-    Serial.print("Connecting to ");
-    Serial.println(ssid);
-    Serial.println(mqttPort);
-
-    WiFi.begin(ssid, ssid_password);
-
-    while (WiFi.status() != WL_CONNECTED)
-    {
-      delay(500);
-      Serial.print(".");
+        client.publish(topic.c_str(), _msg);
     }
 
-    randomSeed(micros());
+    void callback(char *topic, byte *payload, unsigned int length)
+    {
+        String msg;
 
-    Serial.println("");
-    Serial.println("WiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
+        for (int i = 0; i < length; i++)
+            msg.concat((char)payload[i]);
 
-    this->client.setServer(this->mqttServer, this->mqttPort);
-    this->client.setCallback([this](char *topic, byte *payload, unsigned int length) {
-      callback(topic, payload, length);
-    });
-  }
+        onMessage(msg);
+    }
+
+
+    void onMessage(String& data)
+    {
+
+        DynamicJsonDocument data_in(1024);
+        DynamicJsonDocument data_out(1024);
+        deserializeJson(data_in, data);
+
+        String incoming_action = data_in["action"];
+
+        if (incoming_action == "query")
+        {
+            data_out["msg_id"] = data_in["msg_id"];
+            data_out["action"] = "returned_api_response";
+            String query = data_in["query"];
+
+            #ifndef _DISABLE_LOWER_CASE_
+                query.toLowerCase();
+            #endif
+
+            LOG_VALUE("MSG", "Query: ", query);
+
+            String resp = !!HandleResponse ? HandleResponse(query) : this->callbackFunction(query);
+
+            LOG_VALUE("MSG", "Response: ", resp);
+
+            data_out["returned_api_response"] = resp;
+
+            String out_msg;
+            serializeJson(data_out, out_msg);
+            publishMSG(out_msg.c_str());
+
+        }
+        else if (incoming_action == "RATE_LIMITS_INFO"){
+            set_rate_limit((unsigned int)data_in["delay"]);
+        }
+    };
+
 };

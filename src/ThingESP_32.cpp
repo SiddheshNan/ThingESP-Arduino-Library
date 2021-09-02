@@ -1,165 +1,179 @@
-#define MQTT_MAX_PACKET_SIZE 1024
+#pragma once
+
 #if defined(ESP8266)
-#include <ESP8266WiFi.h>
+    #include <ESP8266WiFi.h>
 #elif defined(ESP32)
-#include <WiFi.h>
+    #include <WiFi.h>
 #endif
+
+#include <stdint.h>
+#include <string.h>
+
 #include "PubSubClient/PubSubClient.h"
 #include "ArduinoJson.h"
 
-String HandleResponse(String query);
+#include "thingesp/Logger.cpp"
+#include "thingesp/Device.cpp"
+#include "thingesp/RateLimiter.cpp"
 
-class ThingESP32
+String HandleResponse(String query) __attribute__((weak));
+
+class ThingESP32 : public DeviceData, public RateLimiter
 {
 public:
-  ThingESP32(String username, String deviceName, String password) : g_client(espClient)
-  {
-    this->Username = username;
-    this->DeviceName = deviceName;
-    this->Password = password;
-  };
-
-  void SetWiFi(const char *ssID, const char *ssID_password)
-  {
-    this->ssid = ssID;
-    this->ssid_password = ssID_password;
-  }
-
-  void initDevice()
-  {
-    this->topic = this->DeviceName + "/" + this->Username;
-    this->outname = this->DeviceName + "@" + this->Username;
-
-    this->char_DeviceName = this->DeviceName.c_str();
-    this->char_Password = this->Password.c_str();
-    this->char_outname = this->outname.c_str();
-    this->char_topic = this->topic.c_str();
-    this->initiated = true;
-
-    Serial.println();
-    Serial.print("Connecting to ");
-    Serial.println(ssid);
-    Serial.println(mqttServer);
-
-    WiFi.begin(ssid, ssid_password);
-
-    while (WiFi.status() != WL_CONNECTED)
+    ThingESP32(const char* _username, const char* _projectName, const char* _credentials) : client(espClient)
     {
-      delay(500);
-      Serial.print(".");
+        username = _username;
+        projectName = _projectName;
+        credentials = _credentials;
+
+        genMetaData();
+    };
+
+
+    void sendMsg(String number, String msg)
+    {
+        if (is_rate_limited()) return;
+
+        DynamicJsonDocument data_out(1024);
+        data_out["action"] = "device_call";
+        data_out["to_number"] = number;
+        data_out["msg"] = msg;
+        String outdata;
+        serializeJson(data_out, outdata);
+        publishMSG(outdata.c_str());
     }
 
-    randomSeed(micros());
-
-    Serial.println("");
-    Serial.println("WiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
-
-    g_client.setServer(this->mqttServer, this->mqttPort);
-    g_client.setCallback([this](char *topic, byte *payload, unsigned int length) {
-      callback(topic, payload, length);
-    });
-  }
-
-  void Handle()
-  {
-    if (!g_client.connected())
+    void initDevice()
     {
-      while (!g_client.connected())
-      {
-        delay(10);
-        Serial.print("Attempting connection...");
-        if (g_client.connect(this->char_outname, this->char_outname, this->char_Password))
-        {
-          Serial.println("connected");
-          g_client.subscribe(this->char_topic);
-        }
-        else
-        {
-          Serial.print("failed, rc=");
-          Serial.print(g_client.state());
-          Serial.println(" try again in 5 seconds");
-          delay(5000);
-        }
-      }
-    }
-    g_client.loop();
-  }
+        if (wifi_configured) {
 
-  void sendMsg(String number, String msg)
-  {
-    DynamicJsonDocument data_out(1024);
-    data_out["action"] = "device_call";
-    data_out["to_number"] = number;
-    data_out["msg"] = msg;
-    String outdata;
-    serializeJson(data_out, outdata);
-    publishMSG(outdata.c_str());
-  }
+            LOG_VALUE("WiFi", "Connecting to: ", ssid)
+
+            WiFi.begin(ssid, ssid_password);
+
+            while (WiFi.status() != WL_CONNECTED) {
+                delay(500);
+            }
+
+            LOG("WiFi", "Connected successfully");
+            LOG_VALUE("WiFi","IP address: ", WiFi.localIP());
+
+
+        }
+
+        randomSeed(micros());
+
+        client.setServer(MQTT_SERVER, MQTT_PORT);
+        client.setCallback([this](char *topic, byte *payload, unsigned int length) {
+            callback(topic, payload, length);
+        });
+    }
+
+    void Handle()
+    {
+        if (!client.connected())
+        {
+            while (!client.connected())
+            {
+                LOG("SOCKET", "Attempting connection to ThingESP")
+
+                if (client.connect(outName.c_str(), outName.c_str(), credentials))
+                {
+                    LOG("SOCKET", "Connected to ThingESP successfully")
+                    client.subscribe(topic.c_str());
+                    publishMSG(get_rate_limits_msg());
+                }
+                else
+                {
+                    LOG_VALUE("SOCKET", "Error connecting to ThingESP! Error code: ", client.state());
+                    if (client.state() == 5)
+                        LOG("SOCKET","Please check your username, project name or credentials! ")
+                    LOG("SOCKET",  "Trying again in 10 seconds..");
+                    delay(10000);
+                }
+            }
+        }
+        client.loop();
+    }
+
+
+    void setCallback( String(*clbk)(String) ){
+        this->callbackFunction = clbk;
+    }
 
 private:
-  String Username;
-  String DeviceName;
-  String Password;
 
-  bool initiated = false;
+    /*
+     * the callback function
+     */
+    String (*callbackFunction)(String);
 
-  const char *ssid;
-  const char *ssid_password;
 
-  const char *mqttServer = "thingesp.siddhesh.me";
+    /*
+     * the WiFi Client
+     */
+    WiFiClient espClient;
 
-  int mqttPort = 1893;
 
-  String topic;
-  String outname;
 
-  const char *char_DeviceName;
-  const char *char_Password;
-  const char *char_outname;
-  const char *char_topic;
+    /*
+    * PubSubClient for MQTT
+    */
+    PubSubClient client;
 
-  WiFiClient espClient;
-  PubSubClient g_client;
 
-  void callback(char *topic, byte *payload, unsigned int length)
-  {
-    String srr;
-    Serial.println();
-    Serial.print("Message arrived [");
-    Serial.print(topic);
-    Serial.print("] ");
-    Serial.println();
-    for (int i = 0; i < length; i++)
+    void publishMSG(const char* _msg)
     {
-      srr.concat((char)payload[i]);
+        client.publish(topic.c_str(), _msg);
     }
-    Serial.print(srr);
-    onMessage(srr);
-  }
 
-  void onMessage(String data)
-  {
-    DynamicJsonDocument data_in(1024);
-    DynamicJsonDocument data_out(1024);
-    deserializeJson(data_in, data);
-
-    if (data_in["action"] == "query")
+    void callback(char *topic, byte *payload, unsigned int length)
     {
-      data_out["msg_id"] = data_in["msg_id"];
-      data_out["action"] = "returned_api_response";
-      String query = data_in["query"];
-      query.toLowerCase();
-      data_out["returned_api_response"] = HandleResponse(query);
-      String outdata;
-      serializeJson(data_out, outdata);
-      publishMSG(outdata.c_str());
-    }
-  }
+        String msg;
 
-  void publishMSG(const char *info)
-  {
-    g_client.publish(this->char_topic, info);
-  }
+        for (int i = 0; i < length; i++)
+            msg.concat((char)payload[i]);
+
+        onMessage(msg);
+    }
+
+
+    void onMessage(String& data)
+    {
+
+        DynamicJsonDocument data_in(1024);
+        DynamicJsonDocument data_out(1024);
+        deserializeJson(data_in, data);
+
+        String incoming_action = data_in["action"];
+
+        if (incoming_action == "query")
+        {
+            data_out["msg_id"] = data_in["msg_id"];
+            data_out["action"] = "returned_api_response";
+            String query = data_in["query"];
+
+            #ifndef _DISABLE_LOWER_CASE_
+                        query.toLowerCase();
+            #endif
+
+            LOG_VALUE("MSG", "Query: ", query);
+
+            String resp = !!HandleResponse ? HandleResponse(query) : this->callbackFunction(query);
+
+            LOG_VALUE("MSG", "Response: ", resp);
+
+            data_out["returned_api_response"] = resp;
+
+            String out_msg;
+            serializeJson(data_out, out_msg);
+            publishMSG(out_msg.c_str());
+
+        }
+        else if (incoming_action == "RATE_LIMITS_INFO"){
+            set_rate_limit((unsigned int)data_in["delay"]);
+        }
+    };
+
 };
