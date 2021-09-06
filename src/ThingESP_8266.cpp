@@ -19,10 +19,10 @@
 #include "thingesp/Logger.cpp"
 #include "thingesp/Device.cpp"
 #include "thingesp/RateLimiter.cpp"
+#include "thingesp/Message.cpp"
 
-String HandleResponse(String query) __attribute__((weak));
 
-class ThingESP8266 : public DeviceData, public RateLimiter
+class ThingESP8266 : public DeviceData, public Message
 {
 public:
     ThingESP8266(const char* _username, const char* _projectName, const char* _credentials) : client(espClient)
@@ -39,20 +39,6 @@ public:
 
         genMetaData();
     };
-
-
-    void sendMsg(String number, String msg)
-    {
-        if (is_rate_limited()) return;
-
-        DynamicJsonDocument data_out(1024);
-        data_out["action"] = "device_call";
-        data_out["to_number"] = number;
-        data_out["msg"] = msg;
-        String outdata;
-        serializeJson(data_out, outdata);
-        publishMSG(outdata.c_str());
-    }
 
     void initDevice()
     {
@@ -108,9 +94,6 @@ public:
     }
 
 
-    void setCallback( String(*clbk)(String) ){
-        this->callbackFunction = clbk;
-    }
 
 private:
 
@@ -136,7 +119,7 @@ private:
         PubSubClient client;
 
 
-    void publishMSG(const char* _msg)
+    void publishMSG(const char* _msg) override
     {
         client.publish(topic.c_str(), _msg);
     }
@@ -148,45 +131,10 @@ private:
         for (int i = 0; i < length; i++)
             msg.concat((char)payload[i]);
 
-        onMessage(msg);
+        this->onMessage(msg);
     }
 
 
-    void onMessage(String& data)
-    {
 
-        DynamicJsonDocument data_in(1024);
-        DynamicJsonDocument data_out(1024);
-        deserializeJson(data_in, data);
-
-        String incoming_action = data_in["action"];
-
-        if (incoming_action == "query")
-        {
-            data_out["msg_id"] = data_in["msg_id"];
-            data_out["action"] = "returned_api_response";
-            String query = data_in["query"];
-
-            #ifndef _DISABLE_LOWER_CASE_
-                query.toLowerCase();
-            #endif
-
-            LOG_VALUE("MSG", "Query: ", query);
-
-            String resp = !!HandleResponse ? HandleResponse(query) : this->callbackFunction(query);
-
-            LOG_VALUE("MSG", "Response: ", resp);
-
-            data_out["returned_api_response"] = resp;
-
-            String out_msg;
-            serializeJson(data_out, out_msg);
-            publishMSG(out_msg.c_str());
-
-        }
-        else if (incoming_action == "RATE_LIMITS_INFO"){
-            set_rate_limit((unsigned int)data_in["delay"]);
-        }
-    };
 
 };
