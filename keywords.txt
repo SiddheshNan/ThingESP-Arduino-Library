@@ -3,23 +3,23 @@
 #######################################
 
 #######################################
-# Datatypes (KEYWORD1) Classes
+# Datatypes (KEYWORD1)
 #######################################
 
-WH_ESP8266   KEYWORD1
+ThingESP32   KEYWORD1
+ThingESP8266   KEYWORD1
 
 #######################################
-# Datatypes (KEYWORD2) Methods
+# Methods and Functions (KEYWORD2)
 #######################################
 
-DeviceClient KEYWORD2
+SetWiFi KEYWORD2
+initDevice KEYWORD2
+setCallback KEYWORD2
+Handle KEYWORD2
+sendMsg KEYWORD2
 
+######################################
+# Constants (LITERAL1)
 #######################################
-# Datatypes (KEYWORD3) Setup & Loop
-#######################################
-
-SetDevice    KEYWORD3
-SetWiFi    KEYWORD3
-initDevice    KEYWORD3
-Handle    KEYWORD3
-HandleResponse    KEYWORD3
+HandleResponse    LITERAL1

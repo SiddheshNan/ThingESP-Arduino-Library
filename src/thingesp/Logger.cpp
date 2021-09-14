@@ -7,5 +7,5 @@
 #else
     #define LOG(type, text) void();
     #define LOG_VALUE(type, text, value) void();
-    #define LOG_VALUE(type, text) void();
+    #define LOG_WITHOUT_F(type, text) void();
 #endif
