@@ -1,15 +1,13 @@
 #pragma once
 
 #if defined(ESP8266)
-#include <ESP8266WiFi.h>
+    #include <ESP8266WiFi.h>
 #elif defined(ESP32)
-#include <WiFi.h>
+    #include <WiFi.h>
 #endif
 
 #ifndef _DISABLE_TLS_
-
-#include <WiFiClientSecure.h>
-
+    #include <WiFiClientSecure.h>
 #endif
 
 #include <stdint.h>
@@ -37,7 +35,7 @@ namespace thing_esp {
             projectName = _projectName;
             credentials = _credentials;
 
-            genMetaData();
+            this->genMetaData();
         };
 
         void initDevice() {
@@ -72,7 +70,7 @@ namespace thing_esp {
 
                     if (client.connect(outName.c_str(), outName.c_str(), credentials)) {
                         LOG("SOCKET", "Connected to ThingESP successfully")
-                        client.subscribe(topic.c_str());
+                        client.subscribe(c_topic);
                         publishMSG(get_rate_limits_msg());
                     } else {
                         LOG_VALUE("SOCKET", "Error connecting to ThingESP! Error code: ", client.state());
@@ -93,9 +91,7 @@ namespace thing_esp {
         /*
          * the callback function
          */
-        String (*callbackFunction)(String)
-
-        override;
+        String (*callbackFunction)(String) override;
 
 
         /*
@@ -115,7 +111,7 @@ namespace thing_esp {
 
 
         void publishMSG(const char *_msg) override {
-            client.publish(topic.c_str(), _msg);
+            client.publish(c_topic, _msg);
         }
 
         void callback(char *topic, byte *payload, unsigned int length) {

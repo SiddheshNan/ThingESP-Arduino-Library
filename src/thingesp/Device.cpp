@@ -1,8 +1,12 @@
 #pragma once
+
 #include <Arduino.h>
 #include <stdint.h>
 #include <string.h>
+
 #include "../PubSubClient/PubSubClient.h"
+
+
 namespace thing_esp {
     class DeviceData {
     public:
@@ -23,6 +27,7 @@ namespace thing_esp {
         void genMetaData() {
             this->outName = projectName + "@" + username;
             this->topic = projectName + "/" + username;
+            this->c_topic = topic.c_str();
         }
 
         String projectName;
@@ -31,6 +36,7 @@ namespace thing_esp {
 
         String outName;
         String topic;
+        const char* c_topic;
 
         const char *ssid;
         const char *ssid_password;
@@ -41,10 +47,16 @@ namespace thing_esp {
         /*
          * Check if TLS Disabled or not
          */
-        #if  !defined(_DISABLE_TLS_) && !defined(ESP32)
-                unsigned int MQTT_PORT = 1899; // tls port
+        #if !defined(_MQTT_PORT_)
+
+            #if  !defined(_DISABLE_TLS_) && !defined(ESP32)
+                    unsigned int MQTT_PORT = 1899; // tls port
+            #else
+                    unsigned int MQTT_PORT = 1893; // non-tls port
+            #endif
+
         #else
-                unsigned int MQTT_PORT = 1893; // non-tls port
+            unsigned int MQTT_PORT = _MQTT_PORT_;
         #endif
 
 
